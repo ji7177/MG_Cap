@@ -1,0 +1,636 @@
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { GameState, HatData, HatType, LeaderboardEntry } from './types';
+import { 
+  GAME_WIDTH, 
+  GAME_HEIGHT, 
+  HAT_WIDTH, 
+  HAT_HEIGHT, 
+  GROUND_HEIGHT,
+  INITIAL_SPEED, 
+  SPEED_INCREMENT, 
+  RETRO_COLORS, 
+  HAT_TYPES,
+  ORANGE_KEY,
+  BLUE_KEY,
+  YELLOW_KEY,
+  GRAY_LIGHT,
+  GRAY_MID,
+  GRAY_DARK,
+  GRAY_STROKE,
+  GRAY_BRIGHT,
+  GRAY_DEEP,
+  PIXEL_MAPS,
+  COLLECTION_MAPS
+} from './constants';
+import PixelHat from './components/PixelHat';
+
+interface ExtendedGameState extends GameState {
+  fallingHat: (HatData & { targetY: number; velocityY: number }) | null;
+  failedHat: (HatData & { velocityY: number }) | null;
+  isToppling: boolean;
+  toppleAngle: number;
+  toppleDirection: number;
+  isCinematic: boolean;
+  cinematicCameraY: number | null;
+  gameOverDelay: number; 
+}
+
+enum AnimationPhase {
+  FILL_FORWARD = 0,
+  EMPTY_CENTER = 1,
+  FILL_OUTLINE = 2,
+  EMPTY_BACKWARD = 3
+}
+
+const App: React.FC = () => {
+  const [isLanding, setIsLanding] = useState(true);
+  const isLandingRef = useRef(true);
+  const [nicknameInput, setNicknameInput] = useState('');
+  const [showGameOverStats, setShowGameOverStats] = useState(false);
+
+  // Flip Animation State
+  const [flipState, setFlipState] = useState<boolean[]>([false, false, false]);
+  const [currentFlipIdx, setCurrentFlipIdx] = useState(0);
+  const [isFlippingBack, setIsFlippingBack] = useState(false);
+
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(() => {
+    const saved = localStorage.getItem('hat_leaderboard');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [fillCount, setFillCount] = useState(0);
+  const [animPhase, setAnimPhase] = useState<AnimationPhase>(AnimationPhase.FILL_FORWARD);
+  const [isAnimPaused, setIsAnimPaused] = useState(false);
+  
+  const animColors = useMemo(() => ['#485924', '#0A3463', '#4A4A4A', ORANGE_KEY], []);
+  const [currentAnimColor, setCurrentAnimColor] = useState(ORANGE_KEY);
+
+  const touchStartY = useRef<number | null>(null);
+  const capMap = PIXEL_MAPS[HatType.CAP];
+  
+  const pixelSequences = useMemo(() => {
+    const allPixels: { r: number; c: number }[] = [];
+    capMap.forEach((row, r) => {
+      row.forEach((pixel, c) => {
+        if (pixel === 1) allPixels.push({ r, c });
+      });
+    });
+
+    const rows = capMap.length;
+    const cols = capMap[0].length;
+    const centerR = rows / 2;
+    const centerC = cols / 2;
+
+    const seq1 = [...allPixels];
+    const seq2 = [...allPixels].sort((a, b) => {
+      const distA = Math.sqrt(Math.pow(a.r - centerR, 2) + Math.pow(a.c - centerC, 2));
+      const distB = Math.sqrt(Math.pow(b.r - centerR, 2) + Math.pow(b.c - centerC, 2));
+      return distA - distB;
+    });
+
+    const seq3: { r: number; c: number }[] = [];
+    let remaining = [...allPixels];
+    while (remaining.length > 0) {
+      const outline = remaining.filter(p => {
+        const neighbors = [
+          { r: p.r - 1, c: p.c }, { r: p.r + 1, c: p.c },
+          { r: p.r, c: p.c - 1 }, { r: p.r, c: p.c + 1 }
+        ];
+        return neighbors.some(n => 
+          n.r < 0 || n.r >= rows || n.c < 0 || n.c >= cols || capMap[n.r][n.c] === 0 || !remaining.some(rp => rp.r === n.r && rp.c === n.c)
+        );
+      });
+      seq3.push(...outline);
+      const outlineSet = new Set(outline.map(p => `${p.r},${p.c}`));
+      remaining = remaining.filter(p => !outlineSet.has(`${p.r},${p.c}`));
+    }
+
+    const seq4 = [...allPixels].reverse();
+    return [seq1, seq2, seq3, seq4];
+  }, [capMap]);
+
+  const totalPixels = pixelSequences[0].length;
+  const STACK_STEP = 30;
+
+  useEffect(() => {
+    isLandingRef.current = isLanding;
+    let interval: number;
+    if (isLanding && !isAnimPaused) {
+      interval = window.setInterval(() => {
+        setFillCount(prev => {
+          if (prev >= totalPixels) {
+            setIsAnimPaused(true);
+            setTimeout(() => {
+              setAnimPhase(current => {
+                const next = (current + 1) % 4;
+                const randomColor = animColors[Math.floor(Math.random() * animColors.length)];
+                setCurrentAnimColor(randomColor);
+                return next;
+              });
+              setFillCount(0);
+              setIsAnimPaused(false);
+            }, 200);
+            return totalPixels;
+          }
+          return prev + 2;
+        });
+      }, 60);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [isLanding, totalPixels, animColors, isAnimPaused]);
+
+  // Sequential Flip Effect Logic
+  useEffect(() => {
+    if (!showGameOverStats) return;
+
+    const timer = setTimeout(() => {
+      if (currentFlipIdx < 3) {
+        // Flip current icon
+        setFlipState(prev => {
+          const next = [...prev];
+          next[currentFlipIdx] = !isFlippingBack;
+          return next;
+        });
+        setCurrentFlipIdx(prev => prev + 1);
+      } else {
+        // Wait 1s after all flipped
+        setTimeout(() => {
+          setCurrentFlipIdx(0);
+          setIsFlippingBack(prev => !prev);
+        }, 1000);
+      }
+    }, 600); // Sequence speed
+
+    return () => clearTimeout(timer);
+  }, [showGameOverStats, currentFlipIdx, isFlippingBack]);
+
+  const [gameState, setGameState] = useState<ExtendedGameState>({
+    score: 0,
+    highScore: 0,
+    isGameOver: false,
+    isStarted: false,
+    stack: [{
+      id: 'base',
+      x: (GAME_WIDTH - HAT_WIDTH) / 2,
+      y: GROUND_HEIGHT,
+      color: ORANGE_KEY,
+      type: HatType.CAP
+    }],
+    currentHatX: 0,
+    direction: 1,
+    speed: INITIAL_SPEED,
+    fallingHat: null,
+    failedHat: null,
+    isToppling: false,
+    toppleAngle: 0,
+    toppleDirection: 0,
+    nickname: '',
+    isCinematic: false,
+    cinematicCameraY: null,
+    gameOverDelay: 0
+  });
+
+  const requestRef = useRef<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const saveToLeaderboard = useCallback((nickname: string, score: number) => {
+    setLeaderboard(prev => {
+      const existingEntryIndex = prev.findIndex(entry => entry.nickname === nickname);
+      let newLeaderboard;
+      if (existingEntryIndex !== -1) {
+        newLeaderboard = [...prev];
+        if (score > newLeaderboard[existingEntryIndex].highScore) {
+          newLeaderboard[existingEntryIndex] = { ...newLeaderboard[existingEntryIndex], highScore: score };
+        }
+      } else {
+        newLeaderboard = [...prev, { nickname, highScore: score }];
+      }
+      newLeaderboard.sort((a, b) => b.highScore - a.highScore);
+      localStorage.setItem('hat_leaderboard', JSON.stringify(newLeaderboard));
+      return newLeaderboard;
+    });
+  }, []);
+
+  const resetGame = () => {
+    const currentNick = nicknameInput.trim();
+    if (!currentNick) return;
+    const userBest = leaderboard.find(e => e.nickname === currentNick)?.highScore || 0;
+    setIsLanding(false);
+    isLandingRef.current = false;
+    setShowGameOverStats(false);
+    setFlipState([false, false, false]);
+    setCurrentFlipIdx(0);
+    setIsFlippingBack(false);
+    
+    setGameState(prev => ({
+      ...prev,
+      score: 0,
+      isGameOver: false,
+      isStarted: true,
+      nickname: currentNick,
+      highScore: userBest,
+      stack: [{
+        id: 'base-' + Date.now(),
+        x: (GAME_WIDTH - HAT_WIDTH) / 2,
+        y: GROUND_HEIGHT,
+        color: RETRO_COLORS[Math.floor(Math.random() * RETRO_COLORS.length)],
+        type: HatType.CAP
+      }],
+      currentHatX: 0,
+      direction: 1,
+      speed: INITIAL_SPEED,
+      fallingHat: null,
+      failedHat: null,
+      isToppling: false,
+      toppleAngle: 0,
+      toppleDirection: 0,
+      isCinematic: false,
+      cinematicCameraY: null,
+      gameOverDelay: 0
+    }));
+  };
+
+  const handleDrop = useCallback(() => {
+    if (isLandingRef.current || !gameState.isStarted || gameState.isGameOver || gameState.fallingHat || gameState.isToppling || gameState.isCinematic) return;
+    const targetY = (gameState.stack.length * STACK_STEP) + GROUND_HEIGHT;
+    const currentViewOffset = Math.max(0, targetY - (GAME_HEIGHT / 3));
+    const initialY = GAME_HEIGHT - HAT_HEIGHT - 20 + currentViewOffset;
+    setGameState(prev => ({
+      ...prev,
+      fallingHat: {
+        id: `falling-${prev.score}`,
+        x: prev.currentHatX,
+        y: initialY,
+        targetY: targetY,
+        velocityY: 0, 
+        color: '#FFFFFF',
+        type: HatType.CAP
+      }
+    }));
+  }, [gameState.isStarted, gameState.isGameOver, gameState.fallingHat, gameState.isToppling, gameState.isCinematic, gameState.stack.length, gameState.currentHatX, gameState.score]);
+
+  const update = useCallback(() => {
+    if (!isLandingRef.current) {
+      setGameState(prev => {
+        if (!prev.isStarted || prev.isGameOver) return prev;
+        if (prev.isCinematic) {
+          let nextState = { ...prev };
+          if (prev.failedHat) {
+            const GRAVITY = 0.8;
+            const nextVelocity = prev.failedHat.velocityY + GRAVITY;
+            const nextY = prev.failedHat.y - nextVelocity;
+            if (nextY <= GROUND_HEIGHT) {
+              nextState.failedHat = { ...prev.failedHat, y: GROUND_HEIGHT, velocityY: 0 };
+              nextState.cinematicCameraY = 0;
+              if (prev.gameOverDelay < 12) { 
+                nextState.gameOverDelay = prev.gameOverDelay + 1;
+              } else {
+                nextState.isGameOver = true;
+                saveToLeaderboard(prev.nickname, prev.score);
+              }
+            } else {
+              nextState.failedHat = { ...prev.failedHat, y: nextY, velocityY: nextVelocity };
+              nextState.cinematicCameraY = Math.max(0, nextY - (GAME_HEIGHT / 2));
+            }
+          } else if (prev.isToppling) {
+            if (Math.abs(prev.toppleAngle) < 110) {
+              const baseToppleSpeed = 3.0; 
+              const toppleAcceleration = Math.abs(prev.toppleAngle) * 0.15;
+              nextState.toppleAngle = prev.toppleAngle + (prev.toppleDirection * (baseToppleSpeed + toppleAcceleration));
+            }
+            if (prev.cinematicCameraY !== null) {
+              const camSpeed = 6;
+              const nextCamY = Math.max(0, prev.cinematicCameraY - camSpeed);
+              nextState.cinematicCameraY = nextCamY;
+              if (nextCamY === 0 && Math.abs(nextState.toppleAngle) >= 105) {
+                if (prev.gameOverDelay < 12) {
+                  nextState.gameOverDelay = prev.gameOverDelay + 1;
+                } else {
+                  nextState.isGameOver = true;
+                  saveToLeaderboard(prev.nickname, prev.score);
+                }
+              }
+            }
+          }
+          return nextState;
+        }
+
+        let nextState = { ...prev };
+        if (!prev.fallingHat) {
+          let nextX = prev.currentHatX + (prev.direction * prev.speed);
+          let nextDir = prev.direction;
+          if (nextX >= GAME_WIDTH - HAT_WIDTH) { nextX = GAME_WIDTH - HAT_WIDTH; nextDir = -1; }
+          else if (nextX <= 0) { nextX = 0; nextDir = 1; }
+          nextState.currentHatX = nextX;
+          nextState.direction = nextDir;
+        }
+
+        if (prev.fallingHat) {
+          const ACCELERATION = 0.6;
+          const MAX_SPEED = 22;
+          const nextVelocity = Math.min(MAX_SPEED, prev.fallingHat.velocityY + ACCELERATION);
+          const newY = prev.fallingHat.y - nextVelocity;
+          if (newY <= prev.fallingHat.targetY) {
+            const topHat = prev.stack[prev.stack.length - 1];
+            const diff = prev.fallingHat.x - topHat.x;
+            const absDiff = Math.abs(diff);
+            const SAFE_THRESHOLD = 30; 
+            const EDGE_THRESHOLD = 75;
+            if (absDiff < SAFE_THRESHOLD) {
+              const newScore = prev.score + 1;
+              return {
+                ...prev,
+                score: newScore,
+                stack: [...prev.stack, { ...prev.fallingHat, y: prev.fallingHat.targetY, color: RETRO_COLORS[Math.floor(Math.random() * RETRO_COLORS.length)] }],
+                speed: prev.speed + SPEED_INCREMENT,
+                fallingHat: null,
+                currentHatX: Math.random() * (GAME_WIDTH - HAT_WIDTH)
+              };
+            } else if (absDiff < EDGE_THRESHOLD) {
+              const currentStackTopY = (prev.stack.length * STACK_STEP) + GROUND_HEIGHT;
+              return {
+                ...prev,
+                stack: [...prev.stack, { ...prev.fallingHat, y: prev.fallingHat.targetY, color: '#FF0000' }],
+                fallingHat: null,
+                isToppling: true,
+                isCinematic: true,
+                toppleDirection: diff > 0 ? 1 : -1,
+                cinematicCameraY: Math.max(0, currentStackTopY - (GAME_HEIGHT / 3)),
+                highScore: Math.max(prev.score, prev.highScore)
+              };
+            } else {
+              const currentStackTopY = (prev.stack.length * STACK_STEP) + GROUND_HEIGHT;
+              return {
+                ...prev,
+                isCinematic: true,
+                failedHat: { ...prev.fallingHat, velocityY: nextVelocity },
+                fallingHat: null,
+                cinematicCameraY: Math.max(0, currentStackTopY - (GAME_HEIGHT / 3)),
+                highScore: Math.max(prev.score, prev.highScore)
+              };
+            }
+          } else {
+            nextState.fallingHat = { ...prev.fallingHat, y: newY, velocityY: nextVelocity };
+          }
+        }
+        return nextState;
+      });
+    }
+    requestRef.current = requestAnimationFrame(update);
+  }, [leaderboard, saveToLeaderboard, nicknameInput]);
+
+  useEffect(() => {
+    requestRef.current = requestAnimationFrame(update);
+    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
+  }, [update]);
+
+  const stackHeight = (gameState.stack.length * STACK_STEP) + GROUND_HEIGHT;
+  const standardViewOffset = Math.max(0, stackHeight - (GAME_HEIGHT / 3));
+  const viewOffset = gameState.cinematicCameraY !== null ? gameState.cinematicCameraY : standardViewOffset;
+
+  const handleGameOverWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!showGameOverStats && e.deltaY > 20) setShowGameOverStats(true);
+    else if (showGameOverStats && e.deltaY < -20) setShowGameOverStats(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY; };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchStartY.current - touchEndY;
+    if (!showGameOverStats && deltaY > 50) setShowGameOverStats(true);
+    else if (showGameOverStats && deltaY < -50) setShowGameOverStats(false);
+    touchStartY.current = null;
+  };
+
+  const renderProgressiveHat = () => {
+    const pixelSize = HAT_WIDTH / capMap[0].length;
+    const rowHeight = HAT_HEIGHT / capMap.length;
+    const sequence = pixelSequences[animPhase];
+    const visibilityMap = new Map<string, boolean>();
+    sequence.forEach((p, idx) => {
+      let isVisible = false;
+      switch (animPhase) {
+        case AnimationPhase.FILL_FORWARD:
+        case AnimationPhase.FILL_OUTLINE: isVisible = idx < fillCount; break;
+        case AnimationPhase.EMPTY_CENTER:
+        case AnimationPhase.EMPTY_BACKWARD: isVisible = idx >= fillCount; break;
+      }
+      visibilityMap.set(`${p.r},${p.c}`, isVisible);
+    });
+
+    return (
+      <div className="relative" style={{ width: HAT_WIDTH, height: HAT_HEIGHT }}>
+        {capMap.map((row, rowIndex) => (
+          <div key={rowIndex} className="flex" style={{ height: rowHeight }}>
+            {row.map((pixel, colIndex) => {
+              const isVisible = pixel === 1 && visibilityMap.get(`${rowIndex},${colIndex}`);
+              return (
+                <div key={colIndex} className={isVisible ? "led-pixel" : ""} style={{ width: pixelSize, height: rowHeight, backgroundColor: isVisible ? currentAnimColor : 'transparent', boxShadow: isVisible ? `0 0 5px ${currentAnimColor}, 0 0 10px ${currentAnimColor}66, inset 0 0 2px rgba(255,255,255,0.4)` : 'none', zIndex: isVisible ? 1 : 0, position: 'relative' }}>
+                  {isVisible && <div className="absolute inset-[30%] bg-white/30 rounded-sm blur-[0.2px]" style={{ pointerEvents: 'none' }} />}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderPixelCollectionIcon = (idx: number, size: number = 64) => {
+    const grid = COLLECTION_MAPS[idx];
+    if (!grid) return null;
+    const cellSize = size / grid[0].length;
+    return (
+      <div className="flex flex-col items-center justify-center pixelated" style={{ width: size }}>
+        {grid.map((row, rIdx) => (
+          <div key={rIdx} className="flex" style={{ height: cellSize }}>
+            {row.map((cell, cIdx) => {
+              let color = 'transparent';
+              if (cell === 1) color = ORANGE_KEY;
+              if (cell === 2) color = BLUE_KEY;
+              if (cell === 3) color = GRAY_STROKE;
+              if (cell === 4) color = GRAY_LIGHT;
+              if (cell === 5) color = GRAY_MID;
+              if (cell === 6) color = GRAY_DARK;
+              if (cell === 7) color = GRAY_BRIGHT;
+              if (cell === 8) color = GRAY_DEEP;
+              if (cell === 9) color = YELLOW_KEY;
+              return <div key={cIdx} style={{ width: cellSize, height: cellSize, backgroundColor: color, boxShadow: cell > 0 && cell < 3 ? 'inset 0 0 1px rgba(255,255,255,0.1)' : 'none' }} />;
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const isNicknameEmpty = !nicknameInput.trim();
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white scanlines font-['Press_Start_2P'] overflow-hidden">
+      {isLanding ? (
+        <div className="flex flex-col items-center justify-center w-full h-screen bg-[#1a1a1a] p-4 relative overflow-y-auto">
+          <div className="w-[340px] min-h-[580px] bg-[#d1d1d1] rounded-[30px] shadow-[inset_0_4px_10px_rgba(255,255,255,0.8),0_20px_40px_rgba(0,0,0,0.6)] border-b-[12px] border-r-[8px] border-[#999] flex flex-col items-center p-6 relative">
+            <div className="w-24 h-2 bg-[#bbb] rounded-full mb-6 shadow-inner flex justify-around p-0.5">
+               <div className="w-1 h-1 bg-[#888] rounded-full"></div>
+               <div className="w-1 h-1 bg-[#888] rounded-full"></div>
+               <div className="w-1 h-1 bg-[#888] rounded-full"></div>
+            </div>
+            <div className="w-full flex-[3] bg-[#333] rounded-lg p-2 shadow-[inset_0_4px_8px_rgba(0,0,0,0.8)] border-4 border-[#555] flex flex-col items-center justify-between mb-4">
+              <div className="w-full flex justify-between items-center px-2 py-1">
+                <div className="w-2 h-2 rounded-full bg-[#f00] shadow-[0_0_5px_#f00] animate-pulse"></div>
+                <div className="text-[6px] text-[#888] uppercase tracking-tighter font-sans font-bold">mg console pro</div>
+              </div>
+              <div className="flex-grow w-full bg-black relative flex flex-col items-center justify-center overflow-hidden border-2 border-[#111]">
+                <div className="absolute top-4 text-[8px] text-gray-500 uppercase tracking-widest text-center w-full">mother ground</div>
+                <div className="absolute top-10 text-[10px] text-[#FE6000] uppercase tracking-widest animate-pulse text-center w-full">new nylon cap arrived</div>
+                <div className="scale-[2.2] transform flex items-center justify-center">{renderProgressiveHat()}</div>
+                <div className="absolute bottom-4 w-full text-center"><div className="text-[6px] text-gray-700 uppercase tracking-[4px]">insert coin to start</div></div>
+              </div>
+            </div>
+            <div className="w-full flex flex-col items-center justify-center py-2">
+              <div className="w-full flex items-center gap-4 px-2">
+                <div className="flex-grow flex flex-col items-start">
+                  <label className="text-[7px] text-gray-600 mb-1.5 uppercase font-bold tracking-tighter ml-1 font-sans">player nickname</label>
+                  <input type="text" maxLength={10} value={nicknameInput} onChange={(e) => setNicknameInput(e.target.value)} placeholder="NAME" className="w-full bg-[#777] border-2 border-[#555] rounded-lg p-3 text-white text-[14px] font-sans font-extrabold focus:outline-none focus:border-[#FE6000] focus:bg-[#888] placeholder:text-gray-400 transition-all shadow-inner" />
+                </div>
+                <div className="flex flex-col items-center">
+                  <button onClick={resetGame} disabled={isNicknameEmpty} className={`w-[70px] h-[70px] rounded-full text-white text-[10px] transition-all flex items-center justify-center text-center p-2 leading-tight font-sans font-black mt-3 ${isNicknameEmpty ? 'bg-gray-400 border-b-4 border-gray-600 opacity-50 cursor-not-allowed' : 'bg-[#FE6000] border-b-4 border-[#993a00] active:border-b-0 active:translate-y-1 cursor-pointer'}`}>START</button>
+                </div>
+              </div>
+            </div>
+            <div className="absolute -bottom-10 text-[10px] text-[#FE6000]/50 tracking-widest uppercase">mother ground</div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="z-50 flex justify-between w-full max-w-[400px] px-4 py-6">
+            <div className="flex flex-col"><span className="text-[10px] text-gray-500 mb-1">SCORE</span><span className="text-xl text-[#FE6000]">{gameState.score.toString().padStart(3, '0')}</span></div>
+            <div className="flex flex-col items-end"><span className="text-[10px] text-gray-500 mb-1">BEST ({gameState.nickname})</span><span className="text-xl text-yellow-400">{gameState.highScore.toString().padStart(3, '0')}</span></div>
+          </div>
+          <div ref={containerRef} onClick={handleDrop} className="relative overflow-hidden bg-black border-4 border-[#FE6000] shadow-[0_0_30px_rgba(254,96,0,0.2)] cursor-pointer retro-screen" style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
+            <div className="absolute inset-0 transition-transform duration-500 ease-out" style={{ transform: `translateY(${viewOffset}px) rotate(${gameState.toppleAngle}deg)`, transformOrigin: 'bottom center' }}>
+              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `radial-gradient(${ORANGE_KEY} 1px, transparent 0)`, backgroundSize: '20px 20px', height: Math.max(GAME_HEIGHT, stackHeight + 4000) }} />
+              <div className="absolute bottom-0 w-full h-full">
+                <div className="absolute bottom-0 left-0 w-full border-t-4 border-[#FE6000]/30 bg-black" style={{ height: GROUND_HEIGHT, backgroundImage: 'linear-gradient(45deg, #111 25%, transparent 25%, transparent 50%, #111 50%, #111 75%, transparent 75%, transparent)', backgroundSize: '8px 8px' }} />
+                {gameState.stack.map((hat) => <PixelHat key={hat.id} hat={hat} />)}
+                {gameState.failedHat && <PixelHat hat={gameState.failedHat} />}
+              </div>
+              {gameState.fallingHat && <PixelHat hat={gameState.fallingHat} />}
+            </div>
+            {!gameState.isGameOver && !gameState.fallingHat && !gameState.isToppling && !gameState.isCinematic && <PixelHat hat={{ id: 'active', x: gameState.currentHatX, y: GAME_HEIGHT - HAT_HEIGHT - 20, color: '#FFFFFF', type: HatType.CAP }} />}
+            {gameState.isGameOver && (
+              <div className="absolute inset-0 z-40 bg-black/95 overflow-hidden" onWheel={handleGameOverWheel} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-col h-[200%] transition-transform duration-700 cubic-bezier(0.23, 1, 0.32, 1)" style={{ transform: `translateY(${showGameOverStats ? '-50%' : '0%'})` }}>
+                  <div className="h-1/2 w-full flex flex-col items-center justify-start pt-8 px-4 overflow-y-auto custom-scrollbar">
+                    <h2 className="text-xl text-[#FE6000] mb-2 animate-pulse">{gameState.isToppling ? "IMBALANCED!" : "FAILED"}</h2>
+                    <p className="text-[10px] mb-4">SCORE: {gameState.score}</p>
+                    <div className="w-full max-w-[340px] mb-8 border-2 border-gray-800 p-2">
+                      <div className="text-[10px] text-[#FE6000] mb-4 text-center">--- LEADERBOARD ---</div>
+                      <table className="w-full text-[8px] leading-relaxed">
+                        <thead><tr className="text-gray-500 border-b border-gray-800"><th className="text-left pb-2">RANK</th><th className="text-left pb-2">NAME</th><th className="text-right pb-2">BEST</th></tr></thead>
+                        <tbody>{(() => {
+                          const idx = leaderboard.findIndex(entry => entry.nickname === gameState.nickname);
+                          const rank = idx + 1;
+                          let data = rank <= 10 ? leaderboard.slice(0, 10).map((e, i) => ({ e, r: i + 1, d: false })) : [...leaderboard.slice(0, 8).map((e, i) => ({ e, r: i + 1, d: false })), { e: null, r: 0, d: true }, { e: leaderboard[idx], r: rank, d: false }];
+                          return data.map(({ e, r, d }, i) => d ? <tr key="ell" className="text-gray-600"><td className="py-2 text-center" colSpan={3}>...</td></tr> : e && <tr key={`${e.nickname}-${r}`} className={`${e.nickname === gameState.nickname ? 'text-yellow-400 bg-yellow-400/10' : 'text-white'}`}><td className="py-2">#{r}</td><td className="py-2 truncate">{e.nickname}</td><td className="py-2 text-right">{e.highScore}</td></tr>);
+                        })()}</tbody>
+                      </table>
+                    </div>
+                    <div className="flex w-full gap-3 mb-6"><button onClick={() => setIsLanding(true)} className="flex-1 py-4 bg-gray-700 border-b-4 border-gray-900 active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">MENU</button><button onClick={() => resetGame()} className="flex-1 py-4 bg-[#FE6000] border-b-4 border-[#993a00] active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">RETRY</button></div>
+                    <div className="flex flex-col items-center mt-2 animate-bounce opacity-60"><span className="text-[7px] mb-2 text-gray-500 uppercase">Scroll for items</span><div className="w-4 h-4 border-r-4 border-b-4 border-[#FE6000] rotate-45"></div></div>
+                  </div>
+                  <div className="h-1/2 w-full flex flex-col items-center justify-start pt-8 px-4 overflow-y-auto custom-scrollbar">
+                    <div className="flex flex-col items-center mb-10 animate-bounce opacity-60"><div className="w-4 h-4 border-l-4 border-t-4 border-[#FE6000] rotate-45"></div><span className="text-[7px] mt-2 text-gray-500 uppercase">Scroll up for results</span></div>
+                    <h2 className="text-xl text-yellow-400 mb-20 uppercase text-center">Our Collection</h2>
+                    
+                    {/* Balanced Icon Positioning */}
+                    <div className="flex justify-center items-center w-full mb-20 gap-10">
+                      {[0, 1, 2].map((iconIdx, i) => {
+                        let size = 80;
+                        if (iconIdx === 0) size = 96;
+                        if (iconIdx === 1) size = 88;
+                        if (iconIdx === 2) size = 72;
+
+                        return (
+                          <div key={i} className="w-24 flex justify-center items-center">
+                            <div className={`flip-card ${flipState[i] ? 'flipped' : ''}`} style={{ width: size, height: size }}>
+                              <div className="flip-card-inner">
+                                <div className="flip-card-front flex items-center justify-center">
+                                  {renderPixelCollectionIcon(iconIdx, size)}
+                                </div>
+                                <div className="flip-card-back flex items-center justify-center">
+                                  {renderPixelCollectionIcon(4, 72)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex-grow" />
+
+                    <button 
+                      onClick={() => window.open('https://motherground.imweb.me/', '_blank')} 
+                      className="mb-24 px-6 py-4 bg-[#FE6000] border-b-4 border-[#993a00] active:border-b-0 active:translate-y-1 text-white text-[8px] transition-all uppercase text-center max-w-[280px] button-pulse-interaction"
+                    >
+                      더 많은 collection 구경하러 가기
+                    </button>
+                    
+                    <div className="h-10 w-full" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="mt-8 text-[10px] text-[#FE6000]/50 tracking-widest uppercase">© MOTHER GROUND</div>
+        </>
+      )}
+      <style>{`
+        .pixelated { image-rendering: pixelated; }
+        .led-pixel { animation: led-pulse 2.5s infinite ease-in-out; }
+        @keyframes led-pulse {
+          0%, 100% { opacity: 1; filter: brightness(1.05) saturate(1.1); }
+          50% { opacity: 0.9; filter: brightness(0.95) saturate(1); }
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+        /* Recurring Button Press Animation */
+        @keyframes button-pulse-click {
+          0%, 90%, 100% { transform: translateY(0); border-bottom-width: 4px; }
+          95% { transform: translateY(4px); border-bottom-width: 0; }
+        }
+        .button-pulse-interaction {
+          animation: button-pulse-click 3s infinite ease-in-out;
+        }
+
+        /* Flip Animation Styles */
+        .flip-card { perspective: 1000px; cursor: default; }
+        .flip-card-inner {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+          transform-style: preserve-3d;
+        }
+        .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          backface-visibility: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .flip-card-back { transform: rotateY(180deg); }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
