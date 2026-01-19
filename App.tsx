@@ -24,11 +24,6 @@ import {
 } from './constants';
 import PixelHat from './components/PixelHat';
 
-// Audio imports to solve 404 issues on deployment
-import backgroundSound from './Sound_Background.mp3';
-import winSound from './Sound_Win.mp3';
-import failSound from './Sound_Fail.mp3';
-
 interface ExtendedGameState extends GameState {
   fallingHat: (HatData & { targetY: number; velocityY: number }) | null;
   failedHat: (HatData & { velocityY: number }) | null;
@@ -53,10 +48,10 @@ const App: React.FC = () => {
   const isLandingRef = useRef(true);
   const [nicknameInput, setNicknameInput] = useState('');
 
-  // Audio Refs - Initialized with imported audio files
-  const bgmRef = useRef<HTMLAudioElement>(new Audio(backgroundSound));
-  const winSfxRef = useRef<HTMLAudioElement>(new Audio(winSound));
-  const failSfxRef = useRef<HTMLAudioElement>(new Audio(failSound));
+  // Audio Refs - Using direct relative paths to avoid module resolution errors in ESM
+  const bgmRef = useRef<HTMLAudioElement>(new Audio('./Sound_Background.mp3'));
+  const winSfxRef = useRef<HTMLAudioElement>(new Audio('./Sound_Win.mp3'));
+  const failSfxRef = useRef<HTMLAudioElement>(new Audio('./Sound_Fail.mp3'));
 
   // Audio Setup
   useEffect(() => {
