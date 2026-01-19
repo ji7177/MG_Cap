@@ -47,7 +47,25 @@ const App: React.FC = () => {
   const [isLanding, setIsLanding] = useState(true);
   const isLandingRef = useRef(true);
   const [nicknameInput, setNicknameInput] = useState('');
+  
+ // Audio Refs
+  const bgmRef = useRef<HTMLAudioElement>(new Audio('Sound_Background.mp3'));
+  const winSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Win.mp3'));
+  const failSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Fail.mp3'));
 
+  useEffect(() => {
+    bgmRef.current.loop = true;
+    bgmRef.current.volume = 0.4;
+    bgmRef.current.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3';
+    winSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-winning-chime-2064.mp3';
+    failSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-funny-fail-low-tone-2856.mp3';
+
+    return () => {
+      bgmRef.current.pause();
+      winSfxRef.current.pause();
+      failSfxRef.current.pause();
+    };
+    
   // Flip Animation State
   const [flipState, setFlipState] = useState<boolean[]>([false, false, false]);
   const [currentFlipIdx, setCurrentFlipIdx] = useState(0);
