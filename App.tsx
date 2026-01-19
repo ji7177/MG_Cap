@@ -61,8 +61,8 @@ const App: React.FC = () => {
     
     // 프리뷰용 가상 음악 연결 (파일 업로드 후에는 이 src 부분을 삭제하거나 파일명만 남기면 됩니다)
     bgmRef.current.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3';
-    winSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-winning-chime-2064.mp3';
-    failSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-funny-fail-low-tone-2856.mp3';
+    winSfxRef.current.src = 'Sound_Win.mp3';
+    failSfxRef.current.src = 'Sound_Fail.mp3';
 
     return () => {
       bgmRef.current.pause();
