@@ -48,7 +48,7 @@ const App: React.FC = () => {
   const isLandingRef = useRef(true);
   const [nicknameInput, setNicknameInput] = useState('');
   
- // Audio Refs
+  // Audio Refs
   const bgmRef = useRef<HTMLAudioElement>(new Audio('Sound_Background.mp3'));
   const winSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Win.mp3'));
   const failSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Fail.mp3'));
@@ -65,7 +65,8 @@ const App: React.FC = () => {
       winSfxRef.current.pause();
       failSfxRef.current.pause();
     };
-    
+  }, []);
+  
   // Flip Animation State
   const [flipState, setFlipState] = useState<boolean[]>([false, false, false]);
   const [currentFlipIdx, setCurrentFlipIdx] = useState(0);
