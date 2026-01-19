@@ -57,7 +57,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // 배경음 설정
     bgmRef.current.loop = true;
-    bgmRef.current.volume = 0.3; // BGM은 조금 은은하게
+    bgmRef.current.volume = 1; // BGM은 조금 은은하게
     
     // 브라우저 정책 대응: 사용자 상호작용 시 자동 재생 시도
     const startBGM = () => {
