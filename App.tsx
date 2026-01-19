@@ -48,30 +48,26 @@ const App: React.FC = () => {
   const isLandingRef = useRef(true);
   const [nicknameInput, setNicknameInput] = useState('');
 
-  // Audio Refs - Using direct relative paths to avoid module resolution errors in ESM
-  const bgmRef = useRef<HTMLAudioElement>(new Audio('./Sound_Background.mp3'));
-  const winSfxRef = useRef<HTMLAudioElement>(new Audio('./Sound_Win.mp3'));
-  const failSfxRef = useRef<HTMLAudioElement>(new Audio('./Sound_Fail.mp3'));
+  // Audio Refs
+  const bgmRef = useRef<HTMLAudioElement>(new Audio('Sound_Background.mp3'));
+  const winSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Win.mp3'));
+  const failSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Fail.mp3'));
 
-  // Audio Setup
+  // Audio Setup and Preview URLs
   useEffect(() => {
     // 배경음 설정
     bgmRef.current.loop = true;
-    bgmRef.current.volume = 0.3; // BGM은 조금 은은하게
+    bgmRef.current.volume = 0.4;
     
-    // 브라우저 정책 대응: 사용자 상호작용 시 자동 재생 시도
-    const startBGM = () => {
-      bgmRef.current.play().catch(() => {});
-    };
-    window.addEventListener('mousedown', startBGM);
-    window.addEventListener('keydown', startBGM);
+    // 프리뷰용 가상 음악 연결 (파일 업로드 후에는 이 src 부분을 삭제하거나 파일명만 남기면 됩니다)
+    bgmRef.current.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3';
+    winSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-winning-chime-2064.mp3';
+    failSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-funny-fail-low-tone-2856.mp3';
 
     return () => {
       bgmRef.current.pause();
       winSfxRef.current.pause();
       failSfxRef.current.pause();
-      window.removeEventListener('mousedown', startBGM);
-      window.removeEventListener('keydown', startBGM);
     };
   }, []);
 
@@ -279,8 +275,9 @@ const App: React.FC = () => {
     setCurrentFlipIdx(0);
     setIsFlippingBack(false);
 
-    // BGM 재생 (이미 재생 중일 수도 있지만 명시적으로 보장)
-    bgmRef.current.play().catch(() => {});
+    // BGM 재생
+    bgmRef.current.currentTime = 0;
+    bgmRef.current.play().catch(e => console.log('Audio autoplay blocked', e));
     
     setGameState(prev => ({
       ...prev,
@@ -411,7 +408,8 @@ const App: React.FC = () => {
                 currentHatX: Math.random() * (GAME_WIDTH - HAT_WIDTH)
               };
             } else if (absDiff < EDGE_THRESHOLD) {
-              // 실패 사운드
+              // 실패 사운드 및 BGM 정지
+              bgmRef.current.pause();
               failSfxRef.current.currentTime = 0;
               failSfxRef.current.play().catch(() => {});
               
@@ -427,7 +425,8 @@ const App: React.FC = () => {
                 highScore: Math.max(prev.score, prev.highScore)
               };
             } else {
-              // 실패 사운드
+              // 실패 사운드 및 BGM 정지
+              bgmRef.current.pause();
               failSfxRef.current.currentTime = 0;
               failSfxRef.current.play().catch(() => {});
               
@@ -633,7 +632,7 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex w-full max-w-[340px] gap-3 mb-6">
-                      <button onClick={() => { setIsLanding(true); }} className="flex-1 py-4 bg-gray-700 border-b-4 border-gray-900 active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">MENU</button>
+                      <button onClick={() => { bgmRef.current.pause(); setIsLanding(true); }} className="flex-1 py-4 bg-gray-700 border-b-4 border-gray-900 active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">MENU</button>
                       <button onClick={() => resetGame()} className="flex-1 py-4 bg-[#FE6000] border-b-4 border-[#993a00] active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">RETRY</button>
                     </div>
 
