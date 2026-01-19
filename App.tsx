@@ -527,7 +527,7 @@ const App: React.FC = () => {
                   <label className="text-[7px] text-gray-600 mb-1.5 uppercase font-bold tracking-tighter ml-1 font-sans">player nickname</label>
                   <input 
                     type="text" 
-                    maxLength={10} 
+                    maxLength={15} 
                     value={nicknameInput} 
                     onChange={(e) => setNicknameInput(e.target.value)} 
                     placeholder="NAME" 
