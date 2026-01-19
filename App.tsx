@@ -48,6 +48,33 @@ const App: React.FC = () => {
   const isLandingRef = useRef(true);
   const [nicknameInput, setNicknameInput] = useState('');
 
+  // Audio Refs - Initialized with local filenames
+  const bgmRef = useRef<HTMLAudioElement>(new Audio('Sound_Background.mp3'));
+  const winSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Win.mp3'));
+  const failSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Fail.mp3'));
+
+  // Audio Setup
+  useEffect(() => {
+    // 배경음 설정
+    bgmRef.current.loop = true;
+    bgmRef.current.volume = 0.3; // BGM은 조금 은은하게
+    
+    // 브라우저 정책 대응: 사용자 상호작용 시 자동 재생 시도
+    const startBGM = () => {
+      bgmRef.current.play().catch(() => {});
+    };
+    window.addEventListener('mousedown', startBGM);
+    window.addEventListener('keydown', startBGM);
+
+    return () => {
+      bgmRef.current.pause();
+      winSfxRef.current.pause();
+      failSfxRef.current.pause();
+      window.removeEventListener('mousedown', startBGM);
+      window.removeEventListener('keydown', startBGM);
+    };
+  }, []);
+
   // Flip Animation State
   const [flipState, setFlipState] = useState<boolean[]>([false, false, false]);
   const [currentFlipIdx, setCurrentFlipIdx] = useState(0);
@@ -251,6 +278,9 @@ const App: React.FC = () => {
     setFlipState([false, false, false]);
     setCurrentFlipIdx(0);
     setIsFlippingBack(false);
+
+    // BGM 재생 (이미 재생 중일 수도 있지만 명시적으로 보장)
+    bgmRef.current.play().catch(() => {});
     
     setGameState(prev => ({
       ...prev,
@@ -367,6 +397,10 @@ const App: React.FC = () => {
             const SAFE_THRESHOLD = 30; 
             const EDGE_THRESHOLD = 75;
             if (absDiff < SAFE_THRESHOLD) {
+              // 착지 성공 사운드
+              winSfxRef.current.currentTime = 0;
+              winSfxRef.current.play().catch(() => {});
+              
               const newScore = prev.score + 1;
               return {
                 ...prev,
@@ -377,6 +411,10 @@ const App: React.FC = () => {
                 currentHatX: Math.random() * (GAME_WIDTH - HAT_WIDTH)
               };
             } else if (absDiff < EDGE_THRESHOLD) {
+              // 실패 사운드
+              failSfxRef.current.currentTime = 0;
+              failSfxRef.current.play().catch(() => {});
+              
               const currentStackTopY = (prev.stack.length * STACK_STEP) + GROUND_HEIGHT;
               return {
                 ...prev,
@@ -389,6 +427,10 @@ const App: React.FC = () => {
                 highScore: Math.max(prev.score, prev.highScore)
               };
             } else {
+              // 실패 사운드
+              failSfxRef.current.currentTime = 0;
+              failSfxRef.current.play().catch(() => {});
+              
               const currentStackTopY = (prev.stack.length * STACK_STEP) + GROUND_HEIGHT;
               return {
                 ...prev,
@@ -527,7 +569,7 @@ const App: React.FC = () => {
                   <label className="text-[7px] text-gray-600 mb-1.5 uppercase font-bold tracking-tighter ml-1 font-sans">player nickname</label>
                   <input 
                     type="text" 
-                    maxLength={15} 
+                    maxLength={10} 
                     value={nicknameInput} 
                     onChange={(e) => setNicknameInput(e.target.value)} 
                     placeholder="NAME" 
@@ -591,7 +633,7 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex w-full max-w-[340px] gap-3 mb-6">
-                      <button onClick={() => setIsLanding(true)} className="flex-1 py-4 bg-gray-700 border-b-4 border-gray-900 active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">MENU</button>
+                      <button onClick={() => { setIsLanding(true); }} className="flex-1 py-4 bg-gray-700 border-b-4 border-gray-900 active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">MENU</button>
                       <button onClick={() => resetGame()} className="flex-1 py-4 bg-[#FE6000] border-b-4 border-[#993a00] active:border-b-0 active:translate-y-1 text-white text-[10px] transition-all">RETRY</button>
                     </div>
 
