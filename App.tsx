@@ -113,7 +113,7 @@ const App: React.FC = () => {
     bgmRef.current.loop = true;
     bgmRef.current.volume = 0.4;
     bgmRef.current.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3';
-    winSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-winning-chime-2064.mp3';
+    winSfxRef.current.src = 'Sound_Win.mp3';
     failSfxRef.current.src = 'https://assets.mixkit.co/sfx/preview/mixkit-funny-fail-low-tone-2856.mp3';
 
     return () => {
@@ -548,6 +548,8 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
+          {/* "STEPS STAMP" 텍스트를 게임기 본체 외부 하단(핑크색 네모 위치)으로 이동 */}
+          <div className="mt-8 text-[10px] text-[#FE6000] font-bold tracking-[0.2em] uppercase text-center">STEPS STAMP</div>
         </div>
       ) : (
         <>
