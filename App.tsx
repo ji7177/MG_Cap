@@ -24,6 +24,11 @@ import {
 } from './constants';
 import PixelHat from './components/PixelHat';
 
+// Audio imports to solve 404 issues on deployment
+import backgroundSound from './Sound_Background.mp3';
+import winSound from './Sound_Win.mp3';
+import failSound from './Sound_Fail.mp3';
+
 interface ExtendedGameState extends GameState {
   fallingHat: (HatData & { targetY: number; velocityY: number }) | null;
   failedHat: (HatData & { velocityY: number }) | null;
@@ -48,16 +53,16 @@ const App: React.FC = () => {
   const isLandingRef = useRef(true);
   const [nicknameInput, setNicknameInput] = useState('');
 
-  // Audio Refs - Initialized with local filenames
-  const bgmRef = useRef<HTMLAudioElement>(new Audio('Sound_Background.mp3'));
-  const winSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Win.mp3'));
-  const failSfxRef = useRef<HTMLAudioElement>(new Audio('Sound_Fail.mp3'));
+  // Audio Refs - Initialized with imported audio files
+  const bgmRef = useRef<HTMLAudioElement>(new Audio(backgroundSound));
+  const winSfxRef = useRef<HTMLAudioElement>(new Audio(winSound));
+  const failSfxRef = useRef<HTMLAudioElement>(new Audio(failSound));
 
   // Audio Setup
   useEffect(() => {
     // 배경음 설정
     bgmRef.current.loop = true;
-    bgmRef.current.volume = 1; // BGM은 조금 은은하게
+    bgmRef.current.volume = 0.3; // BGM은 조금 은은하게
     
     // 브라우저 정책 대응: 사용자 상호작용 시 자동 재생 시도
     const startBGM = () => {
