@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { GameState, HatData, HatType, LeaderboardEntry } from './types';
 import { 
   GAME_WIDTH, 
@@ -653,6 +654,7 @@ const App: React.FC = () => {
         .button-pulse-interaction { animation: button-pulse-click 3s infinite ease-in-out; }
         @keyframes button-pulse-click { 0%, 90%, 100% { transform: translateY(0); } 95% { transform: translateY(3px); } }
       `}</style>
+      <Analytics />
     </div>
   );
 };
