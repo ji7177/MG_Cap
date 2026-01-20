@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { GameState, HatData, HatType, LeaderboardEntry } from './types';
 import { 
   GAME_WIDTH, 
@@ -510,6 +511,7 @@ const App: React.FC = () => {
   };
 
   return (
+    <>
     <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white scanlines font-['Press_Start_2P'] overflow-hidden">
       {isLanding ? (
         <div className="flex flex-col items-center justify-center w-full h-screen bg-[#1a1a1a] p-4 relative overflow-y-auto">
@@ -654,6 +656,8 @@ const App: React.FC = () => {
         @keyframes button-pulse-click { 0%, 90%, 100% { transform: translateY(0); } 95% { transform: translateY(3px); } }
       `}</style>
     </div>
+    <Analytics />
+    </>
   );
 };
 
